@@ -443,17 +443,17 @@ static int configure_endpoints(struct snd_usb_audio *chip,
 		if (stop_endpoints(subs, false))
 			sync_pending_stops(subs);
 		if (subs->sync_endpoint) {
-			err = snd_usb_endpoint_prepare(chip, subs->sync_endpoint);
+			err = snd_usb_endpoint_configure(chip, subs->sync_endpoint);
 			if (err < 0)
 				return err;
 		}
-		err = snd_usb_endpoint_prepare(chip, subs->data_endpoint);
+		err = snd_usb_endpoint_configure(chip, subs->data_endpoint);
 		if (err < 0)
 			return err;
 		snd_usb_set_format_quirk(subs, subs->cur_audiofmt);
 	} else {
 		if (subs->sync_endpoint) {
-			err = snd_usb_endpoint_prepare(chip, subs->sync_endpoint);
+			err = snd_usb_endpoint_configure(chip, subs->sync_endpoint);
 			if (err < 0)
 				return err;
 		}
@@ -551,13 +551,7 @@ static int snd_usb_hw_params(struct snd_pcm_substream *substream,
 	subs->cur_audiofmt = fmt;
 	mutex_unlock(&chip->mutex);
 
-	if (subs->sync_endpoint) {
-		ret = snd_usb_endpoint_set_params(chip, subs->sync_endpoint);
-		if (ret < 0)
-			goto unlock;
-	}
-
-	ret = snd_usb_endpoint_set_params(chip, subs->data_endpoint);
+	ret = configure_endpoints(chip, subs);
 
  unlock:
 	if (ret < 0)
@@ -1111,6 +1105,13 @@ static int setup_hw_info(struct snd_pcm_runtime *runtime, struct snd_usb_substre
 				  SNDRV_PCM_HW_PARAM_PERIODS, -1);
 	if (err < 0)
 		return err;
+
+	list_for_each_entry(fp, &subs->fmt_list, list) {
+		if (fp->implicit_fb) {
+			runtime->hw.info |= SNDRV_PCM_INFO_JOINT_DUPLEX;
+			break;
+		}
+	}
 
 	return 0;
 }

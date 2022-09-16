@@ -9,8 +9,8 @@
 //
 
 #include <linux/bitfield.h>
+#include <trace/events/sof.h>
 #include "sof-audio.h"
-#include "sof-of-dev.h"
 #include "ops.h"
 
 static void sof_reset_route_setup_status(struct snd_sof_dev *sdev, struct snd_sof_widget *widget)
@@ -35,6 +35,8 @@ int sof_widget_free(struct snd_sof_dev *sdev, struct snd_sof_widget *swidget)
 
 	if (!swidget->private)
 		return 0;
+
+	trace_sof_widget_free(swidget);
 
 	/* only free when use_count is 0 */
 	if (--swidget->use_count)
@@ -85,6 +87,8 @@ int sof_widget_setup(struct snd_sof_dev *sdev, struct snd_sof_widget *swidget)
 	/* skip if there is no private data */
 	if (!swidget->private)
 		return 0;
+
+	trace_sof_widget_setup(swidget);
 
 	/* widget already set up */
 	if (++swidget->use_count > 1)
@@ -266,14 +270,16 @@ sof_unprepare_widgets_in_path(struct snd_sof_dev *sdev, struct snd_soc_dapm_widg
 	struct snd_sof_widget *swidget = widget->dobj.private;
 	struct snd_soc_dapm_path *p;
 
-	if (!widget_ops[widget->id].ipc_unprepare || !swidget->prepared)
-		goto sink_unprepare;
+	/* return if the widget is in use or if it is already unprepared */
+	if (!swidget->prepared || swidget->use_count > 1)
+		return;
 
-	/* unprepare the source widget */
-	widget_ops[widget->id].ipc_unprepare(swidget);
+	if (widget_ops[widget->id].ipc_unprepare)
+		/* unprepare the source widget */
+		widget_ops[widget->id].ipc_unprepare(swidget);
+
 	swidget->prepared = false;
 
-sink_unprepare:
 	/* unprepare all widgets in the sink paths */
 	snd_soc_dapm_widget_for_each_sink_path(widget, p) {
 		if (!p->walking && p->sink->dobj.private) {
@@ -785,28 +791,6 @@ int sof_dai_get_bclk(struct snd_soc_pcm_runtime *rtd)
 }
 EXPORT_SYMBOL(sof_dai_get_bclk);
 
-static struct snd_sof_of_mach *sof_of_machine_select(struct snd_sof_dev *sdev)
-{
-	struct snd_sof_pdata *sof_pdata = sdev->pdata;
-	const struct sof_dev_desc *desc = sof_pdata->desc;
-	struct snd_sof_of_mach *mach = desc->of_machines;
-
-	if (!mach)
-		return NULL;
-
-	for (; mach->compatible; mach++) {
-		if (of_machine_is_compatible(mach->compatible)) {
-			sof_pdata->tplg_filename = mach->sof_tplg_filename;
-			if (mach->fw_filename)
-				sof_pdata->fw_filename = mach->fw_filename;
-
-			return mach;
-		}
-	}
-
-	return NULL;
-}
-
 /*
  * SOF Driver enumeration.
  */
@@ -827,7 +811,7 @@ int sof_machine_check(struct snd_sof_dev *sdev)
 			return 0;
 		}
 
-		of_mach = sof_of_machine_select(sdev);
+		of_mach = snd_sof_of_machine_select(sdev);
 		if (of_mach) {
 			sof_pdata->of_machine = of_mach;
 			return 0;

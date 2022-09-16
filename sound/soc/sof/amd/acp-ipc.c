@@ -155,7 +155,7 @@ irqreturn_t acp_sof_ipc_irq_thread(int irq, void *context)
 	bool ipc_irq = false;
 	int dsp_msg, dsp_ack;
 
-	if(sdev->first_boot && sdev->fw_state != SOF_FW_BOOT_COMPLETE) {
+	if (sdev->first_boot && sdev->fw_state != SOF_FW_BOOT_COMPLETE) {
 		snd_sof_ipc_msgs_rx(sdev);
 		acp_dsp_ipc_host_done(sdev);
 		return IRQ_HANDLED;

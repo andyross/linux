@@ -105,6 +105,13 @@ enum sof_debugfs_access_type {
 	SOF_DEBUGFS_ACCESS_D0_ONLY,
 };
 
+struct sof_compr_stream {
+	u64 copied_total;
+	u32 sampling_rate;
+	u16 channels;
+	u16 sample_container_bytes;
+};
+
 struct snd_sof_dev;
 struct snd_sof_ipc_msg;
 struct snd_sof_ipc;
@@ -126,6 +133,7 @@ struct snd_sof_platform_stream_params {
 	bool use_phy_address;
 	u32 phy_addr;
 	bool no_ipc_position;
+	bool cont_update_posn;
 };
 
 /*
@@ -283,6 +291,7 @@ struct snd_sof_dsp_ops {
 	void (*machine_unregister)(struct snd_sof_dev *sdev,
 				   void *pdata); /* optional */
 	struct snd_soc_acpi_mach * (*machine_select)(struct snd_sof_dev *sdev); /* optional */
+	struct snd_sof_of_mach * (*of_machine_select)(struct snd_sof_dev *sdev); /* optional */
 	void (*set_mach_params)(struct snd_soc_acpi_mach *mach,
 				struct snd_sof_dev *sdev); /* optional */
 
@@ -592,6 +601,10 @@ struct snd_sof_dev {
 
 	/* to protect the ipc_rx_handler_list  and  dsp_state_handler_list list */
 	struct mutex client_event_handler_mutex;
+
+	/* quirks to override topology values */
+	bool mclk_id_override;
+	u16  mclk_id_quirk; /* same size as in IPC3 definitions */
 
 	void *private;			/* core does not touch this */
 };

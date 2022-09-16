@@ -782,8 +782,6 @@ static bool lpass_hdmi_regmap_volatile(struct device *dev, unsigned int reg)
 		return true;
 	if (reg == LPASS_HDMI_TX_LEGACY_ADDR(v))
 		return true;
-	if (reg == LPASS_HDMI_TX_PARITY_ADDR(v))
-		return true;
 
 	for (i = 0; i < v->hdmi_rdma_channels; ++i) {
 		if (reg == LPAIF_HDMI_RDMACURR_REG(v, i))
@@ -1105,6 +1103,11 @@ int asoc_qcom_lpass_cpu_platform_probe(struct platform_device *pdev)
 	match = of_match_device(dev->driver->of_match_table, dev);
 	if (!match || !match->data)
 		return -EINVAL;
+
+	if (of_device_is_compatible(dev->of_node, "qcom,lpass-cpu-apq8016")) {
+		dev_warn(dev, "%s compatible is deprecated\n",
+			 match->compatible);
+	}
 
 	drvdata->variant = (struct lpass_variant *)match->data;
 	variant = drvdata->variant;

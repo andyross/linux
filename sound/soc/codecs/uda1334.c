@@ -169,10 +169,10 @@ static int uda1334_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 static int uda1334_set_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 {
 	fmt &= (SND_SOC_DAIFMT_FORMAT_MASK | SND_SOC_DAIFMT_INV_MASK |
-		SND_SOC_DAIFMT_MASTER_MASK);
+		SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK);
 
 	if (fmt != (SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
-		    SND_SOC_DAIFMT_CBS_CFS)) {
+		    SND_SOC_DAIFMT_CBC_CFC)) {
 		dev_err(codec_dai->dev, "Invalid DAI format\n");
 		return -EINVAL;
 	}

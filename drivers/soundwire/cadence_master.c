@@ -756,6 +756,14 @@ cdns_reset_page_addr(struct sdw_bus *bus, unsigned int dev_num)
 }
 EXPORT_SYMBOL(cdns_reset_page_addr);
 
+u32 cdns_read_ping_status(struct sdw_bus *bus)
+{
+	struct sdw_cdns *cdns = bus_to_cdns(bus);
+
+	return cdns_readl(cdns, CDNS_MCP_SLAVE_STAT);
+}
+EXPORT_SYMBOL(cdns_read_ping_status);
+
 /*
  * IRQ handling
  */
@@ -1048,7 +1056,7 @@ void sdw_cdns_check_self_clearing_bits(struct sdw_cdns *cdns, const char *string
 			break;
 		}
 
-		dev_dbg(cdns->dev, "%s: MCP_CONTROL_HW_RST is not cleared at iteration %d\n", string, i);
+		dev_err(cdns->dev, "%s: MCP_CONTROL_HW_RST is not cleared at iteration %d\n", string, i);
 		i++;
 
 		usleep_range(1000, 1500);

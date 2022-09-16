@@ -674,7 +674,6 @@ static const struct regmap_config wm8971_regmap = {
 static int wm8971_i2c_probe(struct i2c_client *i2c)
 {
 	struct wm8971_priv *wm8971;
-	int ret;
 
 	wm8971 = devm_kzalloc(&i2c->dev, sizeof(struct wm8971_priv),
 			      GFP_KERNEL);
@@ -687,10 +686,8 @@ static int wm8971_i2c_probe(struct i2c_client *i2c)
 
 	i2c_set_clientdata(i2c, wm8971);
 
-	ret = devm_snd_soc_register_component(&i2c->dev,
+	return devm_snd_soc_register_component(&i2c->dev,
 			&soc_component_dev_wm8971, &wm8971_dai, 1);
-
-	return ret;
 }
 
 static const struct i2c_device_id wm8971_i2c_id[] = {

@@ -11,11 +11,12 @@
 #include "bus.h"
 #include "sysfs_local.h"
 
-static DEFINE_IDA(sdw_ida);
+static DEFINE_IDA(sdw_bus_ida);
+static DEFINE_IDA(sdw_peripheral_ida);
 
 static int sdw_get_id(struct sdw_bus *bus)
 {
-	int rc = ida_alloc(&sdw_ida, GFP_KERNEL);
+	int rc = ida_alloc(&sdw_bus_ida, GFP_KERNEL);
 
 	if (rc < 0)
 		return rc;
@@ -157,9 +158,11 @@ static int sdw_delete_slave(struct device *dev, void *data)
 
 	mutex_lock(&bus->bus_lock);
 
-	if (slave->dev_num) /* clear dev_num if assigned */
+	if (slave->dev_num) { /* clear dev_num if assigned */
 		clear_bit(slave->dev_num, bus->assigned);
-
+		if (bus->dev_num_ida_min)
+			ida_free(&sdw_peripheral_ida, slave->dev_num);
+	}
 	list_del_init(&slave->node);
 	mutex_unlock(&bus->bus_lock);
 
@@ -179,7 +182,7 @@ void sdw_bus_master_delete(struct sdw_bus *bus)
 	sdw_master_device_del(bus);
 
 	sdw_bus_debugfs_exit(bus);
-	ida_free(&sdw_ida, bus->id);
+	ida_free(&sdw_bus_ida, bus->id);
 }
 EXPORT_SYMBOL(sdw_bus_master_delete);
 
@@ -296,6 +299,38 @@ int sdw_transfer(struct sdw_bus *bus, struct sdw_msg *msg)
 
 	return ret;
 }
+
+/**
+ * sdw_show_ping_status() - Direct report of PING status, to be used by Peripheral drivers
+ * @bus: SDW bus
+ * @sync_delay: Delay before reading status
+ */
+void sdw_show_ping_status(struct sdw_bus *bus, bool sync_delay)
+{
+	u32 status;
+
+	if (!bus->ops->read_ping_status)
+		return;
+
+	/*
+	 * wait for peripheral to sync if desired. 10-15ms should be more than
+	 * enough in most cases.
+	 */
+	if (sync_delay)
+		usleep_range(10000, 15000);
+
+	mutex_lock(&bus->msg_lock);
+
+	status = bus->ops->read_ping_status(bus);
+
+	mutex_unlock(&bus->msg_lock);
+
+	if (!status)
+		dev_warn(bus->dev, "%s: no peripherals attached\n", __func__);
+	else
+		dev_dbg(bus->dev, "PING status: %#x\n", status);
+}
+EXPORT_SYMBOL(sdw_show_ping_status);
 
 /**
  * sdw_transfer_defer() - Asynchronously transfer message to a SDW Slave device
@@ -639,10 +674,18 @@ static int sdw_get_device_num(struct sdw_slave *slave)
 {
 	int bit;
 
-	bit = find_first_zero_bit(slave->bus->assigned, SDW_MAX_DEVICES);
-	if (bit == SDW_MAX_DEVICES) {
-		bit = -ENODEV;
-		goto err;
+	if (slave->bus->dev_num_ida_min) {
+		bit = ida_alloc_range(&sdw_peripheral_ida,
+				      slave->bus->dev_num_ida_min, SDW_MAX_DEVICES,
+				      GFP_KERNEL);
+		if (bit < 0)
+			goto err;
+	} else {
+		bit = find_first_zero_bit(slave->bus->assigned, SDW_MAX_DEVICES);
+		if (bit == SDW_MAX_DEVICES) {
+			bit = -ENODEV;
+			goto err;
+		}
 	}
 
 	/*
@@ -816,13 +859,13 @@ static void sdw_modify_slave_status(struct sdw_slave *slave,
 	mutex_lock(&bus->bus_lock);
 
 	dev_vdbg(bus->dev,
-		 "%s: changing status slave %d status %d new status %d\n",
-		 __func__, slave->dev_num, slave->status, status);
+		 "changing status slave %d status %d new status %d\n",
+		 slave->dev_num, slave->status, status);
 
 	if (status == SDW_SLAVE_UNATTACHED) {
 		dev_dbg(&slave->dev,
-			"%s: initializing enumeration and init completion for Slave %d\n",
-			__func__, slave->dev_num);
+			"initializing enumeration and init completion for Slave %d\n",
+			slave->dev_num);
 
 		init_completion(&slave->enumeration_complete);
 		init_completion(&slave->initialization_complete);
@@ -830,8 +873,8 @@ static void sdw_modify_slave_status(struct sdw_slave *slave,
 	} else if ((status == SDW_SLAVE_ATTACHED) &&
 		   (slave->status == SDW_SLAVE_UNATTACHED)) {
 		dev_dbg(&slave->dev,
-			"%s: signaling enumeration completion for Slave %d\n",
-			__func__, slave->dev_num);
+			"signaling enumeration completion for Slave %d\n",
+			slave->dev_num);
 
 		complete(&slave->enumeration_complete);
 	}
@@ -1754,8 +1797,27 @@ int sdw_handle_slave_status(struct sdw_bus *bus,
 
 		if (status[i] == SDW_SLAVE_UNATTACHED &&
 		    slave->status != SDW_SLAVE_UNATTACHED) {
-			dev_warn(&slave->dev, "Slave %d state check1: UNATTACHED, status was %d\n",
-				 i, slave->status);
+			dev_err(&slave->dev, "Slave %d state check1: UNATTACHED, status was %d\n",
+				i, slave->status);
+
+			if (bus->recheck_unattached && bus->ops->read_ping_status) {
+				u32 ping_status;
+
+				mutex_lock(&bus->msg_lock);
+
+				ping_status = bus->ops->read_ping_status(bus);
+
+				mutex_unlock(&bus->msg_lock);
+
+				ping_status >>= (i * 2);
+				ping_status &= 0x3;
+
+				if (ping_status != 0) {
+					dev_err(&slave->dev, "Slave %d state in PING frame is %d, ignoring earlier detection\n",
+						i, ping_status);
+					continue;
+				}
+			}
 			sdw_modify_slave_status(slave, SDW_SLAVE_UNATTACHED);
 		}
 	}
@@ -1838,8 +1900,8 @@ int sdw_handle_slave_status(struct sdw_bus *bus,
 				"Update Slave status failed:%d\n", ret);
 		if (attached_initializing) {
 			dev_dbg(&slave->dev,
-				"%s: signaling initialization completion for Slave %d\n",
-				__func__, slave->dev_num);
+				"signaling initialization completion for Slave %d\n",
+				slave->dev_num);
 
 			complete(&slave->initialization_complete);
 

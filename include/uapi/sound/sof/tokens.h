@@ -88,6 +88,15 @@
 #define SOF_TKN_COMP_CPC			406
 #define SOF_TKN_COMP_IS_PAGES			409
 #define SOF_TKN_COMP_NUM_AUDIO_FORMATS		410
+#define SOF_TKN_COMP_NUM_SINK_PINS		411
+#define SOF_TKN_COMP_NUM_SOURCE_PINS		412
+/*
+ * The token for sink/source pin binding, it specifies the widget
+ * name that the sink/source pin is connected from/to.
+ */
+#define SOF_TKN_COMP_SINK_PIN_BINGING_WNAME	413
+#define SOF_TKN_COMP_SRC_PIN_BINGING_WNAME	414
+
 
 /* SSP */
 #define SOF_TKN_INTEL_SSP_CLKS_CONTROL		500
@@ -157,6 +166,10 @@
 /* MIXER */
 #define SOF_TKN_MIXER_TYPE			1700
 
+/* ACPDMIC */
+#define SOF_TKN_AMD_ACPDMIC_RATE		1800
+#define SOF_TKN_AMD_ACPDMIC_CH			1801
+
 /* CAVS AUDIO FORMAT */
 #define SOF_TKN_CAVS_AUDIO_FORMAT_IN_RATE	1900
 #define SOF_TKN_CAVS_AUDIO_FORMAT_IN_BIT_DEPTH	1901
@@ -184,9 +197,5 @@
 
 /* COPIER */
 #define SOF_TKN_INTEL_COPIER_NODE_TYPE		1980
-
-/* ACPDMIC */
-#define SOF_TKN_AMD_ACPDMIC_RATE               1800
-#define SOF_TKN_AMD_ACPDMIC_CH                 1801
 
 #endif
